@@ -1,15 +1,110 @@
 import requests
 import telegram
-import asyncio # USAMOS ESTA LIBRERÍA PARA PAUSAS ASÍNCRONAS
-from datetime import datetime
-# import time # <<< ELIMINADO: Ya no usaremos time.sleep
+import asyncio
+from datetime import datetime, timedelta
 import os
 
-# --- (1, 2, 3: CONFIGURACIÓN Y FUNCIONES PRINCIPALES DEL BOT — SIN CAMBIOS) ---
+# --- 1. CONFIGURACIÓN DE VARIABLES DE ENTORNO ---
+# El bot obtiene estos valores de la pestaña Variables en Railway
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
+RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY')
 
-# ... (El código de las funciones obtener_resultados_nba y formatear_y_enviar_resultados sigue igual) ...
+# Configuración de la API (NBA RapidAPI)
+API_URL = "https://api-nba-v1.p.rapidapi.com/games"
+HEADERS = {
+    "X-RapidAPI-Host": "api-nba-v1.p.rapidapi.com",
+    "X-RapidAPI-Key": RAPIDAPI_KEY
+}
 
-# --- 4. FUNCIÓN PRINCIPAL DE EJECUCIÓN (Ahora usando loop asíncrono) ---
+# --- 2. FUNCIÓN DE OBTENER DATOS (Síncrona) ---
+
+def obtener_resultados_nba(fecha):
+    """
+    Obtiene los resultados de los partidos de la NBA para una fecha específica.
+    La fecha debe estar en formato YYYYMMDD.
+    """
+    if not RAPIDAPI_KEY:
+        print("ERROR: RAPIDAPI_KEY no está configurada.")
+        return None
+
+    # Ajusta la fecha al formato que espera la API (YYYY-MM-DD)
+    try:
+        fecha_formato_api = datetime.strptime(fecha, '%Y%m%d').strftime('%Y-%m-%d')
+    except ValueError:
+        print(f"Error: Formato de fecha inválido: {fecha}")
+        return None
+
+    querystring = {"date": fecha_formato_api}
+
+    try:
+        response = requests.get(API_URL, headers=HEADERS, params=querystring, timeout=15)
+        response.raise_for_status() # Lanza error si el estado no es 2xx
+        data = response.json()
+        return data.get('response', [])
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR DE CONEXIÓN A LA API: {e}")
+        return None
+    except Exception as e:
+        print(f"ERROR INESPERADO AL PROCESAR DATOS DE LA API: {e}")
+        return None
+
+# --- 3. FUNCIÓN DE ENVIAR MENSAJE (Asíncrona) ---
+
+async def formatear_y_enviar_resultados(datos):
+    """
+    Formatea la información de los partidos y la envía a Telegram.
+    """
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("ERROR: Tokens de Telegram no configurados.")
+        return
+
+    # Inicializa el bot (debe ser asíncrono para el envío)
+    bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
+
+    mensaje = "🏀 **RESULTADOS NBA** 🏀\n\n"
+    partidos_encontrados = False
+
+    for partido in datos:
+        # Solo mostrar partidos que han terminado (Status: 3 - Final)
+        if partido.get('status', {}).get('code') == 3:
+            
+            # Obtener nombres y puntuaciones
+            casa = partido['teams']['home']['name']
+            visita = partido['teams']['visitors']['name']
+            
+            puntos_casa = partido['scores']['home']['points']
+            puntos_visita = partido['scores']['visitors']['points']
+            
+            # Determinar el ganador
+            ganador_casa = "🟢" if puntos_casa > puntos_visita else ""
+            ganador_visita = "🟢" if puntos_visita > puntos_casa else ""
+
+            mensaje += (
+                f"{ganador_visita} **{visita}** ({puntos_visita})\n"
+                f"{ganador_casa} **{casa}** ({puntos_casa})\n"
+                "--------------------\n"
+            )
+            partidos_encontrados = True
+
+    if not partidos_encontrados:
+        mensaje += "No se encontraron partidos finalizados para la fecha de hoy."
+
+    try:
+        # Enviar el mensaje
+        await bot.send_message(
+            chat_id=TELEGRAM_CHAT_ID, 
+            text=mensaje, 
+            parse_mode=telegram.constants.ParseMode.MARKDOWN
+        )
+        print("Mensaje enviado con éxito a Telegram.")
+    except telegram.error.TelegramError as e:
+        print(f"ERROR DE TELEGRAM: {e}")
+    except Exception as e:
+        print(f"ERROR INESPERADO al enviar mensaje: {e}")
+
+
+# --- 4. FUNCIÓN PRINCIPAL DE EJECUCIÓN (Bucle Asíncrono 24/7) ---
 
 async def main():
     """Función principal asíncrona que gestiona el bucle 24/7."""
@@ -17,27 +112,32 @@ async def main():
     # Bucle infinito para que el servicio se mantenga activo
     while True:
         try:
-            fecha_actual = datetime.now().strftime('%Y%m%d')
+            # Usamos la fecha de ayer por defecto, ya que los resultados del día 
+            # se completan la madrugada siguiente.
+            fecha_revision = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
             
-            print(f"--- NUEVO CICLO: Buscando resultados para la fecha: {fecha_actual} ---")
+            print(f"--- NUEVO CICLO: Buscando resultados para la fecha: {fecha_revision} ---")
             
-            datos_partidos = obtener_resultados_nba(fecha_actual)
+            # Llama a la función síncrona
+            datos_partidos = obtener_resultados_nba(fecha_revision)
             
             if datos_partidos:
+                # Llama a la función asíncrona de envío
                 await formatear_y_enviar_resultados(datos_partidos)
             else:
-                print("Fallo: La API de la NBA no devolvió datos o hubo un error de conexión.")
+                print("Fallo: No se encontraron datos o hubo error en la API.")
         
         except Exception as e:
-            # En caso de error crítico
-            print(f"ERROR CRÍTICO: {e}. Intentando reiniciar en 60 segundos...")
-            await asyncio.sleep(60) # Pausa asíncrona de 1 minuto antes de reintentar
+            # En caso de error crítico, registra el error y reintenta
+            print(f"ERROR CRÍTICO GENERAL: {e}. Intentando reiniciar en 60 segundos...")
+            await asyncio.sleep(60)
             continue
         
         # Pausa de 15 minutos (900 segundos) de forma asíncrona
         print("Ciclo completado. Esperando 15 minutos (900s) para la siguiente actualización.")
-        await asyncio.sleep(900) # <<< ESTO ES LO QUE MANTIENE VIVO AL WORKER
-        
+        await asyncio.sleep(900) # Esto es lo que mantiene vivo al worker
+
+
 # --- 5. PUNTO DE ENTRADA ---
 
 if __name__ == "__main__":
