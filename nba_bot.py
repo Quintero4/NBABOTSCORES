@@ -106,36 +106,53 @@ async def formatear_y_enviar_resultados(datos):
 
 # --- 4. FUNCIÓN PRINCIPAL DE EJECUCIÓN (Bucle Asíncrono 24/7) ---
 
+# --- 4. FUNCIÓN PRINCIPAL DE EJECUCIÓN (Modo Prueba) ---
+
 async def main():
-    """Función principal asíncrona que gestiona el bucle 24/7."""
+    """
+    Función principal asíncrona en MODO PRUEBA para verificar la conexión a Telegram.
+    Se ejecutará una sola vez y enviará un mensaje.
+    """
+    try:
+        if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+            print("ERROR: Tokens de Telegram no configurados. Verifica las variables.")
+            return
+
+        bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
+        
+        mensaje_prueba = (
+            "✅ **BOT NBA - PRUEBA EXITOSA** ✅\n\n"
+            "¡El bot está en línea en Railway y la conexión a Telegram funciona!\n\n"
+            "El error 403 es por la clave de RapidAPI o límites de llamadas.\n\n"
+            "➡️ Por favor, reemplaza el código con la versión completa y revisa la clave RAPIDAPI_KEY."
+        )
+
+        await bot.send_message(
+            chat_id=TELEGRAM_CHAT_ID, 
+            text=mensaje_prueba, 
+            parse_mode=telegram.constants.ParseMode.MARKDOWN
+        )
+        print("Mensaje de prueba enviado con éxito a Telegram.")
+        
+    except telegram.error.TelegramError as e:
+        print(f"ERROR DE TELEGRAM EN PRUEBA: {e}")
+    except Exception as e:
+        print(f"ERROR INESPERADO EN PRUEBA: {e}")
+        
+    # Salir después de la prueba
+    print("Modo de prueba completado. El proceso se detendrá.")
+    # NO PONEMOS BUCLE WHILE TRUE NI SLEEP PARA QUE SE CIERRE Y NO GASTE RECURSOS
+
+# --- 5. PUNTO DE ENTRADA ---
+# (Esta sección debe seguir igual que antes)
+
+if __name__ == "__main__":
     
-    # Bucle infinito para que el servicio se mantenga activo
-    while True:
-        try:
-            # Usamos la fecha de ayer por defecto, ya que los resultados del día 
-            # se completan la madrugada siguiente.
-            fecha_revision = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
-            
-            print(f"--- NUEVO CICLO: Buscando resultados para la fecha: {fecha_revision} ---")
-            
-            # Llama a la función síncrona
-            datos_partidos = obtener_resultados_nba(fecha_revision)
-            
-            if datos_partidos:
-                # Llama a la función asíncrona de envío
-                await formatear_y_enviar_resultados(datos_partidos)
-            else:
-                print("Fallo: No se encontraron datos o hubo error en la API.")
-        
-        except Exception as e:
-            # En caso de error crítico, registra el error y reintenta
-            print(f"ERROR CRÍTICO GENERAL: {e}. Intentando reiniciar en 60 segundos...")
-            await asyncio.sleep(60)
-            continue
-        
-        # Pausa de 15 minutos (900 segundos) de forma asíncrona
-        print("Ciclo completado. Esperando 15 minutos (900s) para la siguiente actualización.")
-        await asyncio.sleep(900) # Esto es lo que mantiene vivo al worker
+    print("Iniciando Worker Asíncrono en MODO PRUEBA.")
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Worker detenido.")
 
 
 # --- 5. PUNTO DE ENTRADA ---
@@ -148,3 +165,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Worker detenido.")
+
