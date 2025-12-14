@@ -95,7 +95,7 @@ async def formatear_y_enviar_resultados(datos):
         await bot.send_message(
             chat_id=TELEGRAM_CHAT_ID, 
             text=mensaje, 
-            parse_mode=telegram.constants.ParseMode.MARKDOWN
+            parse_mode=telegram.constants.ParseMode.HTML
         )
         print("Mensaje enviado con éxito a Telegram.")
     except telegram.error.TelegramError as e:
@@ -165,4 +165,5 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Worker detenido.")
+
 
