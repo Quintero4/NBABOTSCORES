@@ -1,26 +1,18 @@
 import requests
 import telegram
-import asyncio
+import asyncio # Necesario para ejecutar el envío asíncrono
 from datetime import datetime
-import time # Añadido para las pausas del bucle 24/7
-import os # Añadido para leer variables de entorno en Render
 
 # --- 1. CONFIGURACIÓN (TUS DATOS) ---
 
-# *******************************************************************
-# IMPORTANTE: Estos valores deben leerse de las Variables de Entorno 
-# en Render. Si vas a ejecutar el script localmente, puedes mantener
-# las líneas comentadas con tus tokens.
-# *******************************************************************
-
 # Datos de Telegram
-TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8424595859:AAGLSCUR3DwGStRvvSoZlseX8Y2CPIvqDiE')
+TELEGRAM_BOT_TOKEN = '8424595859:AAGLSCUR3DwGStRvvSoZlseX8Y2CPIvqDiE'
 # ID de Chat (el número que empieza con -100...)
-TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', -1003320799916) 
+TELEGRAM_CHAT_ID = -1003320799916 
 
 # Datos de RapidAPI
 RAPIDAPI_HOST = 'nba-api-free-data.p.rapidapi.com'
-RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY', 'db43641f98msh7e84415090d14e7p1c529cjsn7bfa5538b221')
+RAPIDAPI_KEY = 'db43641f98msh7e84415090d14e7p1c529cjsn7bfa5538b221'
 API_URL = 'https://nba-api-free-data.p.rapidapi.com/nba-scoreboard-by-date'
 
 # --- 2. FUNCIONES DEL BOT ---
@@ -118,7 +110,6 @@ async def formatear_y_enviar_resultados(datos_api):
 
     # Enviar el mensaje
     try:
-        # Aquí usamos el token ya obtenido de las variables de entorno
         bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
         # Usamos 'await' para que funcione el envío
         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=mensaje, parse_mode='Markdown')
@@ -132,6 +123,9 @@ async def formatear_y_enviar_resultados(datos_api):
 
 async def main():
     """Función principal asíncrona para orquestar la ejecución."""
+    # Mantener la fecha conocida para una prueba de éxito garantizada
+    #fecha_actual = '20250120
+    # OBTIENE LA FECHA DE ACTUALIZADA DIARIA (11 de diciembre de 2025)
     fecha_actual = datetime.now().strftime('%Y%m%d')
     
     print(f"Buscando resultados para la fecha: {fecha_actual}")
@@ -145,23 +139,7 @@ async def main():
     else:
         print("Fallo: La API de la NBA no devolvió datos o hubo un error de conexión.")
 
-# --- 4. BUCLE DE EJECUCIÓN CONTINUA PARA RENDER ---
 
 if __name__ == "__main__":
-    
-    print("Iniciando Worker 24/7 en Render.")
-    
-    # Bucle infinito para que el servicio se mantenga activo
-    while True:
-        try:
-            # Ejecutamos la función principal asíncrona
-            asyncio.run(main())
-        except Exception as e:
-            # En caso de error general (que no debería ocurrir si main maneja bien los errores)
-            print(f"ERROR CRÍTICO: {e}. Reiniciando en 60 segundos...")
-            time.sleep(60) 
-            continue
-        
-        # Pausa de 15 minutos (900 segundos) para cumplir con el ciclo de actualización
-        print("Ciclo completado. Esperando 15 minutos (900s) para la siguiente actualización.")
-        time.sleep(900)
+    # Ejecutamos la función principal asíncrona
+    asyncio.run(main())
