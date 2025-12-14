@@ -39,10 +39,11 @@ def obtener_resultados_nba(fecha):
 
     try:
         response = requests.get(API_URL, headers=HEADERS, params=querystring, timeout=15)
-        response.raise_for_status() # Lanza error si el estado no es 2xx
+        response.raise_for_status() # Lanza error si el estado no es 2xx (incluyendo 403 Forbidden)
         data = response.json()
         return data.get('response', [])
     except requests.exceptions.RequestException as e:
+        # Aquí capturamos el 403 Forbidden
         print(f"ERROR DE CONEXIÓN A LA API: {e}")
         return None
     except Exception as e:
@@ -54,6 +55,7 @@ def obtener_resultados_nba(fecha):
 async def formatear_y_enviar_resultados(datos):
     """
     Formatea la información de los partidos y la envía a Telegram.
+    Usa ParseMode.HTML para evitar errores de formato.
     """
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("ERROR: Tokens de Telegram no configurados.")
@@ -62,7 +64,7 @@ async def formatear_y_enviar_resultados(datos):
     # Inicializa el bot (debe ser asíncrono para el envío)
     bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
 
-    mensaje = "🏀 **RESULTADOS NBA** 🏀\n\n"
+    mensaje = "🏀 <b>RESULTADOS NBA</b> 🏀\n\n" # Usamos <b> para HTML
     partidos_encontrados = False
 
     for partido in datos:
@@ -81,21 +83,21 @@ async def formatear_y_enviar_resultados(datos):
             ganador_visita = "🟢" if puntos_visita > puntos_casa else ""
 
             mensaje += (
-                f"{ganador_visita} **{visita}** ({puntos_visita})\n"
-                f"{ganador_casa} **{casa}** ({puntos_casa})\n"
+                f"{ganador_visita} <b>{visita}</b> ({puntos_visita})\n"
+                f"{ganador_casa} <b>{casa}</b> ({puntos_casa})\n"
                 "--------------------\n"
             )
             partidos_encontrados = True
 
     if not partidos_encontrados:
-        mensaje += "No se encontraron partidos finalizados para la fecha de hoy."
+        mensaje += "No se encontraron partidos finalizados para la fecha de ayer."
 
     try:
         # Enviar el mensaje
         await bot.send_message(
             chat_id=TELEGRAM_CHAT_ID, 
             text=mensaje, 
-            parse_mode=telegram.constants.ParseMode.HTML
+            parse_mode=telegram.constants.ParseMode.HTML # <--- USAMOS HTML
         )
         print("Mensaje enviado con éxito a Telegram.")
     except telegram.error.TelegramError as e:
@@ -105,53 +107,36 @@ async def formatear_y_enviar_resultados(datos):
 
 
 # --- 4. FUNCIÓN PRINCIPAL DE EJECUCIÓN (Bucle Asíncrono 24/7) ---
-# --- 4. FUNCIÓN PRINCIPAL DE EJECUCIÓN (Modo Prueba - CORREGIDO HTML) ---
 
 async def main():
-    """
-    Función principal asíncrona en MODO PRUEBA para verificar la conexión a Telegram.
-    Se ejecutará una sola vez y enviará un mensaje.
-    """
-    try:
-        if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-            print("ERROR: Tokens de Telegram no configurados. Verifica las variables.")
-            return
-
-        bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
-        
-        # Usamos <b> y </b> para negritas en HTML
-        mensaje_prueba = (
-            "✅ <b>BOT NBA - PRUEBA EXITOSA</b> ✅\n\n"
-            "¡El bot está en línea en Railway y la conexión a Telegram funciona!\n\n"
-            "El error 403 es por la clave de RapidAPI o límites de llamadas.\n\n"
-            "➡️ Por favor, reemplaza el código con la versión completa y revisa la clave RAPIDAPI_KEY."
-        )
-
-        await bot.send_message(
-            chat_id=TELEGRAM_CHAT_ID, 
-            text=mensaje_prueba, 
-            parse_mode=telegram.constants.ParseMode.HTML # <--- ESTO ES CRUCIAL
-        )
-        print("Mensaje de prueba enviado con éxito a Telegram.")
-        
-    except telegram.error.TelegramError as e:
-        print(f"ERROR DE TELEGRAM EN PRUEBA: {e}")
-    except Exception as e:
-        print(f"ERROR INESPERADO EN PRUEBA: {e}")
-        
-    # Salir después de la prueba
-    print("Modo de prueba completado. El proceso se detendrá.")
-
-# --- 5. PUNTO DE ENTRADA ---
-# (Esta sección debe seguir igual que antes)
-
-if __name__ == "__main__":
+    """Función principal asíncrona que gestiona el bucle 24/7."""
     
-    print("Iniciando Worker Asíncrono en MODO PRUEBA.")
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Worker detenido.")
+    # Bucle infinito para que el servicio se mantenga activo
+    while True:
+        try:
+            # Usamos la fecha de ayer para obtener resultados completados
+            fecha_revision = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
+            
+            print(f"--- NUEVO CICLO: Buscando resultados para la fecha: {fecha_revision} ---")
+            
+            # Llama a la función síncrona
+            datos_partidos = obtener_resultados_nba(fecha_revision)
+            
+            if datos_partidos:
+                # Llama a la función asíncrona de envío
+                await formatear_y_enviar_resultados(datos_partidos)
+            else:
+                print("Fallo: No se encontraron datos o hubo error en la API.")
+        
+        except Exception as e:
+            # En caso de error crítico general
+            print(f"ERROR CRÍTICO GENERAL: {e}. Intentando reiniciar en 60 segundos...")
+            await asyncio.sleep(60)
+            continue
+        
+        # Pausa de 15 minutos (900 segundos) de forma asíncrona
+        print("Ciclo completado. Esperando 15 minutos (900s) para la siguiente actualización.")
+        await asyncio.sleep(900) # Esto es lo que mantiene vivo al worker
 
 
 # --- 5. PUNTO DE ENTRADA ---
@@ -164,6 +149,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Worker detenido.")
-
-
-
