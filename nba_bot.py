@@ -105,8 +105,7 @@ async def formatear_y_enviar_resultados(datos):
 
 
 # --- 4. FUNCIÓN PRINCIPAL DE EJECUCIÓN (Bucle Asíncrono 24/7) ---
-
-# --- 4. FUNCIÓN PRINCIPAL DE EJECUCIÓN (Modo Prueba) ---
+# --- 4. FUNCIÓN PRINCIPAL DE EJECUCIÓN (Modo Prueba - CORREGIDO HTML) ---
 
 async def main():
     """
@@ -120,8 +119,9 @@ async def main():
 
         bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
         
+        # Usamos <b> y </b> para negritas en HTML
         mensaje_prueba = (
-            "✅ **BOT NBA - PRUEBA EXITOSA** ✅\n\n"
+            "✅ <b>BOT NBA - PRUEBA EXITOSA</b> ✅\n\n"
             "¡El bot está en línea en Railway y la conexión a Telegram funciona!\n\n"
             "El error 403 es por la clave de RapidAPI o límites de llamadas.\n\n"
             "➡️ Por favor, reemplaza el código con la versión completa y revisa la clave RAPIDAPI_KEY."
@@ -130,7 +130,7 @@ async def main():
         await bot.send_message(
             chat_id=TELEGRAM_CHAT_ID, 
             text=mensaje_prueba, 
-            parse_mode=telegram.constants.ParseMode.MARKDOWN
+            parse_mode=telegram.constants.ParseMode.HTML # <--- ESTO ES CRUCIAL
         )
         print("Mensaje de prueba enviado con éxito a Telegram.")
         
@@ -141,7 +141,6 @@ async def main():
         
     # Salir después de la prueba
     print("Modo de prueba completado. El proceso se detendrá.")
-    # NO PONEMOS BUCLE WHILE TRUE NI SLEEP PARA QUE SE CIERRE Y NO GASTE RECURSOS
 
 # --- 5. PUNTO DE ENTRADA ---
 # (Esta sección debe seguir igual que antes)
@@ -165,5 +164,6 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Worker detenido.")
+
 
 
